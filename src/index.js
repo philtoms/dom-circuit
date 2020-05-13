@@ -27,8 +27,12 @@ const DOMcircuit = (blueprint, terminal, element) => (
     terminal = false;
   }
   const propagate = function (signalState, signal, deferred, id) {
-    // halt propagation when signal is empty
-    if (signalState === undefined) return state;
+    // halt propagation when signal is empty or unchanged
+    if (
+      signalState === undefined ||
+      (signal in state && signalState[signal] === state[signal])
+    )
+      return state;
     deferred
       ? terminal((state = signalState), id)
       : (state =
@@ -113,22 +117,19 @@ const DOMcircuit = (blueprint, terminal, element) => (
       );
 
     function handler(value) {
-      // only propagate changed state
-      return value === state[address]
-        ? value
-        : propagate.call(
-            this,
-            children
-              ? value
-              : reducer.call(
-                  this,
-                  state,
-                  value === _CURRENT ? state[address] : value
-                ),
-            address,
-            deferredChild,
-            id
-          );
+      return propagate.call(
+        this,
+        children
+          ? value
+          : reducer.call(
+              this,
+              state,
+              value === _CURRENT ? state[address] : value
+            ),
+        address,
+        deferredChild,
+        id
+      );
     }
 
     reducers.push([address, children ? terminal : handler, deferredChild]);

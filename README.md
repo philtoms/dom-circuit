@@ -4,7 +4,7 @@ A little state machine for Javascript applications that live on the DOM.
 
 `dom-circuit` is small utility function that weaves selected DOM elements into a state machine.
 
-The state machine acts like a live circuit where elements feed input signals, changes in state drive outputs and ordinary reducers handle state logic. The state machine is conveniently constructed in Javascript Object form.
+The state machine acts like a live circuit where elements feed input signals that drive state change through reducers into output signals. Output signals propagate through the circuit until they arrive, fully reduced, at the circuit terminal.
 
 The following example leaves out the HTML markup detail and item handling logic of a TODO application and focuses on the state changes that might be expected when these two aspects are brought together.
 

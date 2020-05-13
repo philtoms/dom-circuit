@@ -63,13 +63,6 @@ describe('dom-circuit', () => {
       DOMcircuit({ '#id': x })({ id: 123 }).id(456);
       expect(x).toHaveBeenCalledWith({ id: 123 }, 456);
     });
-    it('should only reduce changed state', () => {
-      const x = jest.fn((state, value) => ({ ...state, id: value }));
-      const circuit = DOMcircuit({ '#id': x })({ id: 123 });
-      circuit.id(456);
-      circuit.id(456);
-      expect(x).toHaveBeenCalledTimes(1);
-    });
     it('should reduce all signals', () => {
       const x = (state, value) => ({ ...state, x: value });
       const y = (state, value) => ({ ...state, y: value });
@@ -219,15 +212,6 @@ describe('dom-circuit', () => {
       handlers.click.call(element, { target: element });
       expect(circuit.state.id).toBe(element);
     });
-    it('should halt propagation', () => {
-      const initState = { id: { class: 123 } };
-      const y = function () {
-        return;
-      };
-      const circuit = DOMcircuit({ id: { '@click': y } }, element)(initState);
-      handlers.click.call(element, { target: element });
-      expect(circuit.state).toBe(initState);
-    });
     it('should propagate through to deferred state', () => {
       const s1 = function (state, value) {
         return { ...state, s1: value };
@@ -258,6 +242,25 @@ describe('dom-circuit', () => {
       circuit.x.y.z.s1(456);
       expect(terminal).toHaveBeenCalledWith({ d: { s2: 2 } }, '/d/s2');
       expect(terminal).toHaveBeenCalledWith(circuit.state, '/x/y/z/s1');
+    });
+    it('should only propagate changed state', () => {
+      const x = (state, value) => ({ ...state, id: value });
+      const terminal = jest.fn((state) => state);
+      const circuit = DOMcircuit({ id: x }, terminal, element)({ id: 123 });
+      circuit.id(456);
+      circuit.id(456);
+      expect(terminal).toHaveBeenCalledTimes(1);
+    });
+    it('should halt propagation', () => {
+      const initState = { id: 123 };
+      const terminal = jest.fn((state) => state);
+      const x = function () {
+        return;
+      };
+      const circuit = DOMcircuit({ id: x })(initState);
+      circuit.id(456);
+      expect(terminal).not.toHaveBeenCalled();
+      expect(circuit.state).toBe(initState);
     });
     it('should propagate @state', () => {
       const circuit = DOMcircuit({
