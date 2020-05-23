@@ -75,7 +75,7 @@ Reducers follow the standard reducer argument pattern: `(state, value) => ({...s
 The value returned by the reducer will propagate through the circuit, bubbling up until it hits the circuit terminal function - an optional function that receives the changed circuit state:
 
 ```
-const terminal = (state, id) => console.log(state, id)
+const terminal = (state, signal) => console.log(state, signal)
 circuit({
   'add: count': ({ count }, value) => ({ count: count + value }),
 }, terminal)({
