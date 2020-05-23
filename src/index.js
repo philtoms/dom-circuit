@@ -15,9 +15,7 @@ const optimisticQuery = (e, s) =>
 
 const DOMcircuit = (blueprint, terminal, element) => (
   state = {},
-  parent = {
-    id: '',
-  },
+  parent = { id: '' },
   reducers = [],
   deferred = [],
   deferredChild
@@ -123,21 +121,21 @@ const DOMcircuit = (blueprint, terminal, element) => (
         deferring
       );
 
-    let handler = function (value, deferred, deferredState = state) {
+    const handler = function (value, deferred, deferredState = state) {
       if (value === _CURRENT) value = state[address];
+      const signal = address || parent.address;
       return propagate(
         children
           ? value
           : this || !elements.length
-          ? reducer.call(this, deferredState, value)
+          ? reducer.call({ signal, element: this }, deferredState, value)
           : elements.reduce(
-              (acc, element) => reducer.call(element, acc, value),
+              (acc, element) => reducer.call({ signal, element }, acc, value),
               deferredState
             ),
         address || parent.address,
         deferredChild || deferred,
-        id,
-        address ? terminal : parent.terminal
+        id
       );
     };
 

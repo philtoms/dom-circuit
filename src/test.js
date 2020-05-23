@@ -97,7 +97,7 @@ describe('dom-circuit', () => {
       };
       const circuit = DOMcircuit({ 'id@click': y }, element)({});
       handlers.click.call(element, { target: element });
-      expect(circuit.state).toEqual({ id: element });
+      expect(circuit.state).toEqual({ id: { signal: 'id', element } });
     });
     it('should bind an alias to a DOM element', () => {
       const y = function (state, { target }) {
@@ -113,9 +113,7 @@ describe('dom-circuit', () => {
       };
       const circuit = DOMcircuit({ '#id': { '@click': y } }, element)();
       handlers.click.call(element, { target: element });
-      expect(circuit.state).toEqual({
-        id: element,
-      });
+      expect(circuit.state).toEqual({ id: { signal: 'id', element } });
     });
     it('should bind a signal to multiple DOM elements', () => {
       const y = function () {
@@ -275,6 +273,26 @@ describe('dom-circuit', () => {
       })({});
       circuit.id.x(2);
       expect(circuit.state).toEqual({ id: { x: 3 } });
+    });
+  });
+});
+
+describe('addons', () => {
+  describe('map', () => {
+    it('should adapt reduce api', () => {
+      const v = jest.fn();
+      const map = (fn) => (state, value) => fn(value);
+      DOMcircuit({ x: map(v) })({}).x(123);
+      expect(v).toHaveBeenCalledWith(123);
+    });
+    it('should reduce mapped value', () => {
+      const map = (fn) =>
+        function (state, value) {
+          return { ...state, [this.signal]: fn(value) };
+        };
+      const circuit = DOMcircuit({ x: map((v) => v) })({});
+      circuit.x(123);
+      expect(circuit.state).toEqual({ x: 123 });
     });
   });
 });
