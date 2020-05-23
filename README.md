@@ -27,7 +27,7 @@ const todo = circuit({
 })({});
 ```
 
-In the example above, the `add` signal will bind in precedence order to elements with a class-name, id or type equal to `add`. A `change` event listener is attached to the selected element and a signal will be generated whenever the handler is activated. The signalled reducer receives the current state and the new value. The new state is propagated through the circuit.
+In the example above, the `add` signal will bind in order of precedence to elements with a class-name, id or type equal to `add`. A `change` event listener is attached to the selected element and a signal will be generated whenever the handler is activated. The signalled reducer receives the current state and the new value. The new state is propagated through the circuit.
 
 ## How it works
 
@@ -60,7 +60,7 @@ Signals can be applied across circuit properties to facilitate multiple binding 
 }
 ```
 
-Each circuit identifier takes the value of the signal selector as its name. When this is not semantically appropriate or logical, an alias can be used.
+Each circuit identifier takes the value of the signal selector as its name. When this is not semantically appropriate, an alias can be used.
 
 ```
 circuit({

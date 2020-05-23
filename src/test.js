@@ -93,29 +93,27 @@ describe('dom-circuit', () => {
     });
     it('should bind a signal to a DOM element', () => {
       const y = function () {
-        return this;
+        return { id: this };
       };
       const circuit = DOMcircuit({ 'id@click': y }, element)({});
       handlers.click.call(element, { target: element });
-      expect(circuit.state).toEqual(element);
+      expect(circuit.state).toEqual({ id: { signal: 'id', element } });
     });
     it('should bind an alias to a DOM element', () => {
       const y = function (state, { target }) {
-        return target;
+        return { XXX: target };
       };
       const circuit = DOMcircuit({ 'XXX:id@click': y }, element)({});
       circuit.XXX({ target: element });
-      expect(circuit.state).toEqual(element);
+      expect(circuit.state).toEqual({ XXX: element });
     });
     it('should bind a signal to a parent DOM element', () => {
-      const y = function () {
-        return this;
+      const y = function (state) {
+        return { ...state, id: this };
       };
-      const circuit = DOMcircuit({ '#id': { '@click': y } }, element)({});
+      const circuit = DOMcircuit({ '#id': { '@click': y } }, element)();
       handlers.click.call(element, { target: element });
-      expect(circuit.state).toEqual({
-        id: element,
-      });
+      expect(circuit.state).toEqual({ id: { signal: 'id', element } });
     });
     it('should bind a signal to multiple DOM elements', () => {
       const y = function () {
@@ -125,32 +123,26 @@ describe('dom-circuit', () => {
       expect(element.addEventListener).toHaveBeenCalledTimes(2);
     });
     it('should bind multiple signals to a single DOM', () => {
-      const y1 = function () {
-        return this;
-      };
-      const y2 = function () {
-        return this;
-      };
+      const y1 = (state) => ({ ...state, id: state.id + 1 });
+      const y2 = (state) => ({ ...state, id: state.id + 2 });
       const circuit = DOMcircuit(
         { '#id': { '@click1': y1, '@click2': y2 } },
         element
-      )({});
+      )({ id: 1 });
       handlers.click1.call(element, { target: element });
       expect(circuit.state).toEqual({
-        id: element,
+        id: 2,
       });
       handlers.click2.call(element, { target: element });
       expect(circuit.state).toEqual({
-        id: element,
+        id: 4,
       });
     });
   });
 
   describe('state change', () => {
     it('should manipulate current state', () => {
-      const y = function (state, { target }) {
-        return target;
-      };
+      const y = (state, { target }) => ({ id: target });
       const circuit = DOMcircuit(
         { '#id': { '@click': y } },
         element
@@ -161,19 +153,15 @@ describe('dom-circuit', () => {
       });
     });
     it('should preserve current state', () => {
-      const y = function (state, { target }) {
-        return { ...state, target };
-      };
+      const y = (state, { target }) => ({ ...state, id: target });
       const circuit = DOMcircuit(
         { '#id': { '@click': y } },
         element
-      )({ id: { class: 123 } });
+      )({ class: 123 });
       handlers.click.call(element, { target: element });
       expect(circuit.state).toEqual({
-        id: {
-          target: element,
-          class: 123,
-        },
+        id: element,
+        class: 123,
       });
     });
     it('should jump state', () => {
@@ -204,13 +192,12 @@ describe('dom-circuit', () => {
   });
 
   describe('propagation', () => {
-    it('should propagate @event values', () => {
-      const y = function (s, { target: element }) {
-        return element;
-      };
-      const circuit = DOMcircuit({ id: { '@click': y } }, element)();
-      handlers.click.call(element, { target: element });
-      expect(circuit.state.id).toBe(element);
+    it('should propagate through sibling state', () => {
+      const x = (state, value) => ({ ...state, x: state.x + value });
+      const y = () => ({ x: 2, y: 1 });
+      const circuit = DOMcircuit({ x, y }, element)({ x: 1 });
+      circuit.y();
+      expect(circuit.state).toEqual({ x: 4, y: 1 });
     });
     it('should propagate through to deferred state', () => {
       const s1 = function (state, value) {
@@ -262,7 +249,22 @@ describe('dom-circuit', () => {
       expect(terminal).not.toHaveBeenCalled();
       expect(circuit.state).toBe(initState);
     });
-    it('should propagate @state', () => {
+  });
+
+  describe('events', () => {
+    it('should merge @init into original state', () => {
+      const originalState = {
+        id: 1,
+      };
+      const circuit = DOMcircuit({
+        id: {
+          '@init': (state) => state + 1,
+        },
+      })(originalState);
+      expect(circuit.state).toBe(originalState);
+      expect(circuit.state).toEqual({ id: 2 });
+    });
+    it('should propagate to @state', () => {
       const circuit = DOMcircuit({
         id: {
           x: (s, x) => ({ ...s, x }),
@@ -273,17 +275,24 @@ describe('dom-circuit', () => {
       expect(circuit.state).toEqual({ id: { x: 3 } });
     });
   });
+});
 
-  describe('events', () => {
-    it('should merge @init into original state', () => {
-      const originalState = {
-        id: 1,
-      };
-      const circuit = DOMcircuit({
-        id: { '@init': (state) => state + 1 },
-      })(originalState);
-      expect(circuit.state).toBe(originalState);
-      expect(circuit.state).toEqual({ id: 2 });
+describe('addons', () => {
+  describe('map', () => {
+    it('should adapt reduce api', () => {
+      const v = jest.fn();
+      const map = (fn) => (state, value) => fn(value);
+      DOMcircuit({ x: map(v) })({}).x(123);
+      expect(v).toHaveBeenCalledWith(123);
+    });
+    it('should reduce mapped value', () => {
+      const map = (fn) =>
+        function (state, value) {
+          return { ...state, [this.signal]: fn(value) };
+        };
+      const circuit = DOMcircuit({ x: map((v) => v) })({});
+      circuit.x(123);
+      expect(circuit.state).toEqual({ x: 123 });
     });
   });
 });
