@@ -193,11 +193,11 @@ describe('dom-circuit', () => {
 
   describe('propagation', () => {
     it('should propagate through sibling state', () => {
-      const x = (state, value) => ({ ...state, x: state.x + value });
-      const y = () => ({ x: 2, y: 1 });
-      const circuit = DOMcircuit({ x, y }, element)({ x: 1 });
+      const x = (state, value) => ({ ...state, x: value + 1 });
+      const y = () => ({ x: 1, y: 1 });
+      const circuit = DOMcircuit({ x, y }, element)({});
       circuit.y();
-      expect(circuit.state).toEqual({ x: 4, y: 1 });
+      expect(circuit.state).toEqual({ x: 2, y: 1 });
     });
     it('should propagate through to deferred state', () => {
       const s1 = function (state, value) {
@@ -275,6 +275,59 @@ describe('dom-circuit', () => {
       expect(circuit.state).toEqual({ id: { x: 3 } });
     });
   });
+
+  describe('async', () => {
+    it('should resolve at state change', async () => {
+      const circuit = DOMcircuit({
+        x: (s, x) => Promise.resolve({ ...s, x: 2 }),
+      })({});
+      await circuit.x();
+      expect(await circuit.state).toEqual({ x: 2 });
+    });
+    it('should resolve at deep state change', async () => {
+      const circuit = DOMcircuit({
+        id: {
+          x: (s, x) => Promise.resolve({ ...s, x }),
+        },
+      })({});
+      await circuit.id.x(2);
+      expect(circuit.state).toEqual({ id: { x: 2 } });
+    });
+
+    it('should resolve at terminal', async () => {
+      const terminal = async (state) => {
+        expect(state).toEqual({ id: { x: 2 } });
+      };
+      const circuit = DOMcircuit(
+        {
+          id: {
+            x: (s, x) => Promise.resolve({ ...s, x }),
+          },
+        },
+        terminal
+      )({});
+      circuit.id.x(2);
+    });
+    it('should resolve sibling state change sequence at terminal', (done) => {
+      const terminal = (state, signal) => {
+        if (signal === '/id/z') {
+          expect(state).toEqual({ id: { x: 1, y: 2, z: 3 } });
+          done();
+        }
+      };
+      const circuit = DOMcircuit(
+        {
+          id: {
+            x: (s, x) => Promise.resolve({ ...s, x, y: 1 }),
+            y: (s, y) => Promise.resolve({ ...s, y: y + 1, z: 2 }),
+            z: (s, z) => Promise.resolve({ ...s, z: z + 1 }),
+          },
+        },
+        terminal
+      )({});
+      circuit.id.x(1);
+    });
+  });
 });
 
 describe('addons', () => {
@@ -290,9 +343,9 @@ describe('addons', () => {
         function (state, value) {
           return { ...state, [this.signal]: fn(value) };
         };
-      const circuit = DOMcircuit({ x: map((v) => v) })({});
+      const circuit = DOMcircuit({ x: map((v) => v + v) })({});
       circuit.x(123);
-      expect(circuit.state).toEqual({ x: 123 });
+      expect(circuit.state).toEqual({ x: 246 });
     });
   });
 });

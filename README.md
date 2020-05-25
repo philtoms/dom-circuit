@@ -2,7 +2,7 @@
 
 A little state machine for Javascript applications that live on the DOM.
 
-`dom-circuit` is small utility function that weaves selected DOM elements into a state machine.
+`dom-circuit` is small utility function that weaves selected DOM elements into a declarative state machine that organizes complex application logic into predictable signal states.
 
 The state machine acts like a live circuit where elements feed input signals that drive state change through reducers into output signals. Output signals propagate through the circuit until they arrive, fully reduced, at the circuit terminal.
 
@@ -63,26 +63,26 @@ Signals can be applied across circuit properties to facilitate multiple binding 
 Each circuit identifier takes the value of the signal selector as its name. When this is not semantically appropriate, an alias can be used.
 
 ```
-circuit({
+const cct = circuit({
   'add:count' (({count}, value) => ({count: count + value}))
 })({count: 1})
 
-circuit.add(1) // => 2
+cct.add(1) // => 2
 ```
 
 Reducers follow the standard reducer argument pattern: `(state, value) => ({...state, value})`. The state passed into the reducer is the state of the immediate parent of the reducer property.
 
-The value returned by the reducer will propagate through the circuit, bubbling up until it hits the circuit terminal function - an optional function that receives the changed circuit state:
+The value returned by the reducer will propagate through the circuit, bubbling up until it hits the circuit terminal function - an optional function that receives the changed circuit state as a `{value, signal}` pair:
 
 ```
 const terminal = (state, signal) => console.log(state, signal)
-circuit({
+const cct = circuit({
   'add: count': ({ count }, value) => ({ count: count + value }),
 }, terminal)({
   count: 1,
 });
 
-circuit.add(1) // logs the current state => ({count: 2}, '/count')
+cct.add(1) // logs the current state => ({count: 2}, '/count')
 ```
 
 Circuit state change can be actioned directly from within a reducer in several ways:
@@ -138,3 +138,18 @@ This pattern uses a simplified XPath syntax to bind a state change event to anot
 ```
 
 State change propagation will be further reduced by deferred reducer(s) before bubbling up through the circuit until it reaches the circuit terminal. The deferred reducer will receive its own current state and the reduced state value from the initiating reducer.
+
+## State change and signalling behavior
+
+`dom-circuit` flattens internal state changes into a predicable output signal. If a terminal is attached to the circuit, the output signal sequence is guaranteed to be aligned with the order of internal state change. This guarantee holds through asynchronous operations.
+
+```
+const terminal = (value, signal) => console.log(signal)
+const cct = circuit({
+  state1: () => cct.state2(),
+  state2: () => Promise.resolve(cct.state3),
+  state3: () => Promise.resolve(state => ({...state, done: true}))
+}, terminal)();
+
+cct.state1() // logs => '/state1', '/state2', '/state3'
+```
