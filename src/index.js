@@ -32,6 +32,7 @@ const DOMcircuit = (circuit, terminal, element) => (
     )
       return state;
 
+    let lastState = state;
     const nextState = deferred
       ? signalState
       : // reduce signal state into circuit state.
@@ -60,7 +61,7 @@ const DOMcircuit = (circuit, terminal, element) => (
     }
 
     state = circuit['@state']
-      ? circuit['@state'](nextState, signalState[signal])
+      ? circuit['@state'](lastState, nextState)
       : nextState;
 
     return terminal ? terminal(state, id) || state : state;
