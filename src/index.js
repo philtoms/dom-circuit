@@ -1,9 +1,12 @@
-const _REDUCERS = Symbol();
-const document = typeof window !== 'undefined' && window.document;
+const _REDUCERS = Symbol('_REDUCERS');
+const _ID = Symbol('_ID');
 const fromRoot = (circuit, [head, ...tail]) =>
   tail.length
     ? fromRoot(circuit[head], tail)
-    : circuit[head] && circuit[head][_REDUCERS];
+    : typeof circuit[head] === 'object'
+    ? [circuit[head][_REDUCERS], false]
+    : [circuit[_REDUCERS], _ID];
+const document = typeof window !== 'undefined' && window.document;
 
 export const _CURRENT = Symbol();
 
@@ -17,8 +20,8 @@ const DOMcircuit = (circuit, terminal, element) => (
   state = {},
   parent = { id: '' },
   reducers = [],
-  deferred = [],
-  deferredChild
+  deferredSignals = [],
+  deferredSignal
 ) => {
   if (!element && typeof terminal !== 'function') {
     element = terminal || [];
@@ -31,16 +34,19 @@ const DOMcircuit = (circuit, terminal, element) => (
       (signal in signalState && signalState[signal] === state[signal])
     )
       return state;
+    if (deferred === _ID) return signalState;
 
-    let lastState = state;
+    const lastState = state;
     const nextState = deferred
       ? signalState
       : // reduce signal state into circuit state.
-        reducers.reduce((acc, [address, handler, deferred]) => {
-          // deferred children handle their own state chains and will always
-          // be propagated after local state has been reduced
-          acc = deferred
-            ? handler(acc) && state
+        reducers.reduce((acc, [address, handler, deferred, shared]) => {
+          acc = shared
+            ? { ...acc, ...handler(acc[signal], _ID) }
+            : // deferred children handle their own state chains and will
+            // always be propagated after local state has been reduced
+            deferred
+            ? handler(deferred === _ID ? acc[signal] : acc) && state
             : address in signalState
             ? signalState[address] === acc[address]
               ? acc
@@ -76,14 +82,20 @@ const DOMcircuit = (circuit, terminal, element) => (
       return acc;
     }
 
-    let deferReducers =
-      event.startsWith('/') && fromRoot(acc, event.slice(1).split('/'));
+    let [resolvedReducers, deferredId] =
+      (event.startsWith('/') && fromRoot(acc, event.slice(1).split('/'))) || [];
     const deferring = !deferredReducers && event.startsWith('/');
     if (deferring) {
-      deferReducers = [];
-      deferred.push([signal, reducer, deferReducers]);
-    } else if (deferReducers) {
-      deferredReducers.forEach((reducer) => deferReducers.push(reducer));
+      resolvedReducers = [];
+      deferredSignals.push([signal, reducer, resolvedReducers]);
+    } else if (resolvedReducers) {
+      deferredReducers.forEach((reducer) =>
+        resolvedReducers.push([
+          ...reducer,
+          deferredId || true,
+          resolvedReducers === reducers,
+        ])
+      );
       return acc;
     }
     // optionally query on parent element(s) unless selector is event
@@ -123,12 +135,12 @@ const DOMcircuit = (circuit, terminal, element) => (
       )(
         typeof state[address] === 'object' ? state[address] : state,
         { id, state, address },
-        deferReducers || [],
-        deferred,
+        resolvedReducers || [],
+        deferredSignals,
         deferring
       );
 
-    const handler = function (value) {
+    const handler = function (value, deferredId) {
       if (value === _CURRENT) value = state[address];
       const signal = address || parent.address;
       return propagate(
@@ -141,7 +153,7 @@ const DOMcircuit = (circuit, terminal, element) => (
               state
             ),
         address || parent.address,
-        deferredChild,
+        deferredId || deferredSignal,
         id
       );
     };
@@ -153,11 +165,7 @@ const DOMcircuit = (circuit, terminal, element) => (
       });
     }
 
-    reducers.push([
-      address || parent.address,
-      children ? terminal : handler,
-      deferredChild,
-    ]);
+    reducers.push([address || parent.address, children ? terminal : handler]);
 
     acc[alias || address] = (value) => handler(value)[address];
     return children
@@ -175,7 +183,7 @@ const DOMcircuit = (circuit, terminal, element) => (
 
   return parent.id
     ? signals
-    : Object.defineProperty(deferred.reduce(build, signals), 'state', {
+    : Object.defineProperty(deferredSignals.reduce(build, signals), 'state', {
         get() {
           return state;
         },

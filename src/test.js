@@ -194,7 +194,19 @@ describe('circuit', () => {
       cct.y();
       expect(cct.state).toEqual({ x: 2, y: 1 });
     });
-    it('should propagate through to deferred state', () => {
+    it('should propagate to deferred nested state', () => {
+      const s1 = function (state, value) {
+        return { ...state, x: value };
+      };
+      const s2 = function (state, value) {
+        return { ...state, d: value };
+      };
+      const cct = circuit({ x: s1, 'd@/x': { s2 } })({});
+      cct.x(456);
+      expect(cct.state.x).toEqual(456);
+      expect(cct.state.d).toEqual(456);
+    });
+    it('should propagate nested state to deferred nested state', () => {
       const s1 = function (state, value) {
         return { ...state, s1: value };
       };
@@ -207,6 +219,17 @@ describe('circuit', () => {
       )({});
       cct.x.y.z.s1(456);
       expect(cct.state.d.s2).toEqual({ y: { z: { s1: 456 } } });
+    });
+    it('should propagate nested state to deeply deferred nested state', () => {
+      const s1 = function (state, value) {
+        return { ...state, z: value };
+      };
+      const s2 = function (state, value) {
+        return { ...state, s2: value };
+      };
+      const cct = circuit({ x: { y: { z: s1 } }, 'd@/x/y/z': { s2 } })({});
+      cct.x.y.z(456);
+      expect(cct.state.d.s2).toEqual(456);
     });
     it('should propagate through to terminal', () => {
       const s1 = function (state) {
@@ -320,7 +343,6 @@ describe('circuit', () => {
         },
         terminal
       )({});
-      debugger;
       cct.id.x(1);
     });
   });
@@ -353,8 +375,8 @@ describe('README examples', () => {
     })({
       count: 1,
     });
-    cct.add(4);
-    expect(cct.state).toEqual({ count: 5 });
+    cct.add(1);
+    expect(cct.state.count).toEqual(2);
   });
 
   describe('todo', () => {
@@ -392,7 +414,6 @@ describe('README examples', () => {
     });
 
     it('should add an item', () => {
-      debugger;
       todo.header.add({ text: 'todo 1' });
       expect(todo.state.items).toEqual([{ id: 1, text: 'todo 1' }]);
     });
