@@ -78,6 +78,31 @@ describe('circuit', () => {
       cct.id.x.y(456);
       expect(cct.state).toEqual({ id: { x: { y: 456 } } });
     });
+    it('should expose signal to reducer', () => {
+      let signal;
+      const y = function () {
+        signal = this.signal;
+      };
+      const cct = circuit({ id: y })({});
+      cct.id();
+      expect(signal).toBe('/id');
+    });
+    it('should expose base state to reducer', () => {
+      let state;
+      const z = function () {
+        state = this.state;
+      };
+      circuit({ x: { y: { z } } })({ a: 123 }).x.y.z();
+      expect(state).toEqual({ a: 123 });
+    });
+    it('should expose base signals to reducer', () => {
+      const z = function (state, value) {
+        this.a.b.c(value);
+      };
+      const c = jest.fn();
+      circuit({ x: { y: { z } }, a: { b: { c } } })({}).x.y.z(123);
+      expect(c).toHaveBeenCalledWith({}, 123);
+    });
   });
 
   describe('binding', () => {
@@ -91,11 +116,11 @@ describe('circuit', () => {
     });
     it('should bind a signal to a DOM element', () => {
       const y = function () {
-        return { id: this };
+        return { element: this.el };
       };
       const cct = circuit({ 'id@click': y }, element)({});
       handlers.click.call(element, { target: element });
-      expect(cct.state).toEqual({ id: { signal: 'id', element } });
+      expect(cct.state).toEqual({ element });
     });
     it('should bind an alias to a DOM element', () => {
       const y = function (state, { target }) {
@@ -106,12 +131,12 @@ describe('circuit', () => {
       expect(cct.state).toEqual({ XXX: element });
     });
     it('should bind a signal to a parent DOM element', () => {
-      const y = function (state) {
-        return { ...state, id: this };
+      const y = function () {
+        return { element: this.el };
       };
       const cct = circuit({ '#id': { '@click': y } }, element)();
       handlers.click.call(element, { target: element });
-      expect(cct.state).toEqual({ id: { signal: 'id', element } });
+      expect(cct.state).toEqual({ element });
     });
     it('should bind a signal to multiple DOM elements', () => {
       const y = function () {
@@ -363,7 +388,7 @@ describe('addons', () => {
         };
       const cct = circuit({ x: map((v) => v + v) })({});
       cct.x(123);
-      expect(cct.state).toEqual({ x: 246 });
+      expect(cct.state).toEqual({ ['/x']: 246 });
     });
   });
 });

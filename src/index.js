@@ -16,8 +16,9 @@ const optimisticQuery = (e, s) =>
     []
   );
 
-const DOMcircuit = (circuit, terminal, element) => (
+const DOMcircuit = (circuit, terminal, element, _base) => (
   state = {},
+  base = () => _base,
   parent = { id: '' },
   reducers = [],
   deferredSignals = [],
@@ -134,6 +135,7 @@ const DOMcircuit = (circuit, terminal, element) => (
         elements
       )(
         typeof state[address] === 'object' ? state[address] : state,
+        base,
         { id, state, address },
         resolvedReducers || [],
         deferredSignals,
@@ -142,12 +144,14 @@ const DOMcircuit = (circuit, terminal, element) => (
 
     const handler = function (value, deferredId) {
       if (value === _CURRENT) value = state[address];
-      const signal = address || parent.address;
+      const cct = base();
+      cct.signal = id;
+      cct.el = this;
       return propagate(
         children
           ? value
           : this || !elements.length
-          ? reducer.call({ signal, element: this }, state, value)
+          ? reducer.call(cct, state, value)
           : elements.reduce(
               (acc, element) => reducer.call({ signal, element }, acc, value),
               state
@@ -181,13 +185,13 @@ const DOMcircuit = (circuit, terminal, element) => (
     [_REDUCERS]: reducers,
   });
 
-  return parent.id
+  return (_base = parent.id
     ? signals
     : Object.defineProperty(deferredSignals.reduce(build, signals), 'state', {
         get() {
           return state;
         },
-      });
+      }));
 };
 
 export default DOMcircuit;
