@@ -43,11 +43,13 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
       : // reduce signal state into circuit state.
         reducers.reduce((acc, [address, handler, deferred, shared]) => {
           acc = shared
-            ? { ...acc, ...handler(acc[signal], _ID) }
+            ? { ...acc, ...handler(acc[signal], _ID, acc) }
             : // deferred children handle their own state chains and will
             // always be propagated after local state has been reduced
             deferred
-            ? handler(deferred === _ID ? acc[signal] : acc) && state
+            ? handler
+              ? handler(deferred === _ID ? acc[signal] : acc, true) && state
+              : acc
             : address in signalState
             ? signalState[address] === acc[address]
               ? acc
@@ -67,8 +69,8 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
       return state;
     }
 
-    state = circuit['@state']
-      ? circuit['@state'](lastState, nextState)
+    state = circuit['$state']
+      ? circuit['$state'](lastState, nextState)
       : nextState;
 
     return terminal ? terminal(state, id) || state : state;
@@ -76,7 +78,7 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
 
   const build = (acc, [signal, reducer, deferredReducers]) => {
     const [, , alias, , _se] = signal.match(/(([\w]+):)?(\s*(.+))?/);
-    const [selector, event = ''] = _se.split('@');
+    const [selector, event = ''] = _se.split('$');
     if (event === 'init') {
       state = reducer(state[parent.address]);
       parent.state[parent.address] = state;
@@ -87,12 +89,15 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
       (event.startsWith('/') && fromRoot(acc, event.slice(1).split('/'))) || [];
     const deferring = !deferredReducers && event.startsWith('/');
     if (deferring) {
-      resolvedReducers = [];
-      deferredSignals.push([signal, reducer, resolvedReducers]);
+      if (typeof reducer !== 'function') {
+        resolvedReducers = [];
+        deferredSignals.push([signal, reducer, resolvedReducers]);
+      }
     } else if (resolvedReducers) {
-      deferredReducers.forEach((reducer) =>
+      deferredReducers.forEach(([s, r]) =>
         resolvedReducers.push([
-          ...reducer,
+          s,
+          r,
           deferredId || true,
           resolvedReducers === reducers,
         ])
@@ -142,8 +147,8 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
         deferring
       );
 
-    const handler = function (value, deferredId) {
-      if (value === _CURRENT) value = state[address];
+    const handler = function (value, deferredId, acc = state) {
+      if (value === _CURRENT) value = acc[address];
       const cct = base();
       cct.signal = id;
       cct.el = this;
@@ -151,10 +156,10 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
         children
           ? value
           : this || !elements.length
-          ? reducer.call(cct, state, value)
+          ? reducer.call(cct, acc, value)
           : elements.reduce(
               (acc, element) => reducer.call({ signal, element }, acc, value),
-              state
+              acc
             ),
         address || parent.address,
         deferredId || deferredSignal,
@@ -169,7 +174,12 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
       });
     }
 
-    reducers.push([address || parent.address, children ? terminal : handler]);
+    reducers.push([
+      address || parent.address,
+      children ? terminal : handler,
+      !children && deferring && deferredId,
+      !children && deferring && resolvedReducers === reducers,
+    ]);
 
     acc[alias || address] = (value) => handler(value)[address];
     return children
