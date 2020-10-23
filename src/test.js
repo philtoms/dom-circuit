@@ -219,6 +219,20 @@ describe('circuit', () => {
       cct.y();
       expect(cct.state).toEqual({ x: 2, y: 1 });
     });
+    it('should not propagate unchanged sibling state', () => {
+      const x = (state, value) => ({ ...state, x: value + 1 });
+      const y = () => ({ x: 1, y: 1 });
+      const cct = circuit({ x, y }, element)({ x: 1 });
+      cct.y();
+      expect(cct.state).toEqual({ x: 1, y: 1 });
+    });
+    it('should not propagate through sibling event', () => {
+      const x = (state, value) => ({ ...state, x: value + 1 });
+      const y = () => ({ x: 1, y: 1 });
+      const cct = circuit({ x$state: x, y }, element)();
+      cct.y();
+      expect(cct.state).toEqual({ y: 1 });
+    });
     it('should propagate to deferred state', () => {
       const s1 = function (state, value) {
         return { ...state, x: value };

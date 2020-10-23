@@ -6,17 +6,17 @@ const fromRoot = (circuit, [head, ...tail]) =>
     : typeof circuit[head] === 'object'
     ? [circuit[head][_REDUCERS], false]
     : [circuit[_REDUCERS], _ID];
-const document = typeof window !== 'undefined' && window.document;
 
 export const _CURRENT = Symbol();
 
+const document = typeof window !== 'undefined' && window.document;
 const optimisticQuery = (e, s) =>
   ['.', '#', ''].reduce(
     (acc, q) => (acc.length ? acc : e.querySelectorAll(q + s)),
     []
   );
 
-const DOMcircuit = (circuit, terminal, element, _base) => (
+const wireUp = (circuit, terminal, element, _base) => (
   state = {},
   base = () => _base,
   parent = { id: '' },
@@ -41,22 +41,25 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
     const nextState = deferred
       ? signalState
       : // reduce signal state into circuit state.
-        reducers.reduce((acc, [address, handler, deferred, shared]) => {
-          acc = shared
-            ? { ...acc, ...handler(acc[signal], _ID, acc) }
-            : // deferred children handle their own state chains and will
-            // always be propagated after local state has been reduced
-            deferred
-            ? handler
-              ? handler(deferred === _ID ? acc[signal] : acc, true) && state
-              : acc
-            : address in signalState
-            ? signalState[address] === acc[address]
+        reducers.reduce((acc, [address, event, handler, deferred, shared]) => {
+          acc =
+            event && address !== signal
               ? acc
-              : address === signal
-              ? { ...acc, [address]: signalState[signal] }
-              : handler(signalState[address])
-            : signalState;
+              : shared
+              ? { ...acc, ...handler(acc[signal], _ID, acc) }
+              : // deferred children handle their own state chains and will
+              // always be propagated after local state has been reduced
+              deferred
+              ? handler
+                ? handler(deferred === _ID ? acc[signal] : acc, true) && state
+                : acc
+              : address in signalState
+              ? signalState[address] === acc[address]
+                ? acc
+                : address === signal
+                ? { ...acc, [address]: signalState[signal] }
+                : handler(signalState[address])
+              : signalState;
           if (!(acc instanceof Promise)) state = acc;
           return acc;
         }, state);
@@ -94,9 +97,10 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
         deferredSignals.push([signal, reducer, resolvedReducers]);
       }
     } else if (resolvedReducers) {
-      deferredReducers.forEach(([s, r]) =>
+      deferredReducers.forEach(([s, e, r]) =>
         resolvedReducers.push([
           s,
+          e,
           r,
           deferredId || true,
           resolvedReducers === reducers,
@@ -128,7 +132,7 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
     // a signal can be handled directly or passed through to a child circuit
     const children =
       typeof reducer !== 'function' &&
-      DOMcircuit(
+      wireUp(
         reducer,
         (value, id) =>
           propagate(
@@ -176,6 +180,7 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
 
     reducers.push([
       address || parent.address,
+      event && !deferring,
       children ? terminal : handler,
       !children && deferring && deferredId,
       !children && deferring && resolvedReducers === reducers,
@@ -204,4 +209,4 @@ const DOMcircuit = (circuit, terminal, element, _base) => (
       }));
 };
 
-export default DOMcircuit;
+export default wireUp;
