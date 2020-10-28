@@ -6,7 +6,7 @@ A little state machine for Javascript applications that live on the DOM.
 
 The state machine acts like a live circuit connected to the DOM. Element events generate input signals that drive state change through reducers that feed back into the circuit. Signals propagate through the circuit until they arrive, fully reduced, at the circuit terminal.
 
-Given some DOM
+Given some Markup
 
 ```html
 <body>
@@ -26,11 +26,10 @@ import circuit from 'dom-circuit';
 
 const app = circuit({
   main: {
-    // user input as state
-    name$change: map((e) => e.target.value),
-    // user event and propagate state through cct
-    register$click: (state) => Promise.resolve({ ...state, status: 'ok' }),
-    // state changed
+    // DOM events as accumulated state
+    name$change: (acc, e) => ({ ...acc, name: e.target.value }),
+    // state transition from register to status
+    register$click: (acc) => Promise.resolve({ ...acc, status: 'ok' }),
     status: ({ status }) => {
       this.el.innerHTML = status;
     },
@@ -191,3 +190,8 @@ const cct = circuit(
 
 cct.state1(); // logs => '/state1', '/state2', '/state3'
 ```
+
+## Key features appropriate to programmed Intentionality
+
+This is an experimental API, many of the API design decisions lean towards
+PI, especially around the ideas of iconic and indexical intentionality.
