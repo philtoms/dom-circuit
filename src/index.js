@@ -1,9 +1,17 @@
 const _REDUCERS = Symbol('_REDUCERS');
+const _BASE = Symbol('_BASE');
 
-const fromRoot = (circuit, [head, ...tail]) =>
-  tail.length
-    ? fromRoot(circuit[head], tail)
-    : [(circuit[head] || {})[_REDUCERS] || circuit[_REDUCERS], circuit[head]];
+const fromSignal = (circuit = {}, [head, ...tail]) => {
+  if (head === '.') return fromSignal(circuit, tail);
+  if (head === '..') return fromSignal(circuit[_BASE], tail);
+  if (!head)
+    return circuit[_BASE]
+      ? fromSignal(circuit[_BASE], [head, ...tail])
+      : fromSignal(circuit, tail);
+  return tail.length
+    ? fromSignal(circuit[head], tail)
+    : [circuit[_REDUCERS], circuit[head]];
+};
 
 const document = typeof window !== 'undefined' && window.document;
 const optimisticQuery = (e, s) =>
@@ -12,10 +20,9 @@ const optimisticQuery = (e, s) =>
     []
   );
 
-const build = (signals, terminal, _base) => (
+const build = (signals, terminal, base) => (
   state = {},
   element,
-  base = () => _base,
   parent = { id: '', state: () => state },
   reducers = [],
   deferredSignals = []
@@ -58,10 +65,10 @@ const build = (signals, terminal, _base) => (
     const [, , alias, , _se] = signal.match(/(([\w]+):)?(\s*(.+))?/);
     const [selector, event = ''] = _se.split('$');
     const localCircuit = typeof reducer !== 'function';
-
+    const deferredEvent = event.startsWith('/') || event.startsWith('.');
     let [resolvedReducers] =
-      (event.startsWith('/') && fromRoot(acc, event.slice(1).split('/'))) || [];
-    const deferring = !deferredReducers && event.startsWith('/');
+      (deferredEvent && fromSignal(acc, event.split('/'))) || [];
+    const deferring = !deferredReducers && deferredEvent;
     if (deferring) {
       if (localCircuit) {
         resolvedReducers = [];
@@ -94,28 +101,31 @@ const build = (signals, terminal, _base) => (
 
     // a signal can be handled directly or passed through to a child circuit
     const children =
-      localCircuit &&
-      build(reducer, (value, id, deferred, acc = state) =>
-        propagate(
-          value ? { ...acc, [address]: value } : acc,
-          address,
-          deferred,
-          id
-        )
-      )(
-        state[address],
-        elements,
-        base,
-        { id, address, state: () => state },
-        resolvedReducers || [],
-        deferredSignals,
-        deferring
-      );
+      (localCircuit &&
+        build(
+          reducer,
+          (value, id, deferred, acc = state) =>
+            propagate(
+              value ? { ...acc, [address]: value } : acc,
+              address,
+              deferred,
+              id
+            ),
+          acc
+        )(
+          state[address],
+          elements,
+          { id, address, state: () => state },
+          resolvedReducers || [],
+          deferredSignals,
+          deferring
+        )) ||
+      {};
 
     const self = {
       id,
       address,
-      signal: (id, value) => fromRoot(base(), id.slice(1).split('/'))[1](value),
+      signal: (id, value) => fromSignal(acc, id.split('/'))[1](value),
     };
 
     if (event === 'init') {
@@ -136,7 +146,7 @@ const build = (signals, terminal, _base) => (
       if (typeof value === 'undefined') value = acc[address];
       self.el = this;
       return propagate(
-        children
+        localCircuit
           ? { ...acc, [address]: value }
           : this || !elements.length
           ? reducer.call(self, acc, value) || state
@@ -152,7 +162,7 @@ const build = (signals, terminal, _base) => (
     };
 
     // bind element events to handler. Handler context (this) will be element
-    if (event && !event.startsWith('/') && event !== 'state') {
+    if (event && !deferredEvent && event !== 'state') {
       elements.forEach((element) => {
         element.addEventListener(event, handler);
       });
@@ -161,24 +171,28 @@ const build = (signals, terminal, _base) => (
     if (!address || !event || deferring)
       reducers.push([address, handler, deferring]);
 
-    Object.entries(children || {}).forEach(
-      ([key, value]) => (handler[key] = value)
-    );
+    // transfer local cct to handler
+    Object.entries(children).forEach(([key, value]) => (handler[key] = value));
+    handler[_REDUCERS] = children[_REDUCERS];
+    handler[_BASE] = children[_BASE];
+
     acc[alias || address] = handler;
+
     return acc;
   };
 
   const circuit = Object.entries(signals).reduce(wire, {
     [_REDUCERS]: reducers,
+    [_BASE]: base,
   });
 
-  return (_base = parent.id
+  return parent.id
     ? circuit
     : Object.defineProperty(deferredSignals.reduce(wire, circuit), 'state', {
         get() {
           return state;
         },
-      }));
+      });
 };
 
 export default build;
