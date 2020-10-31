@@ -4,65 +4,59 @@ A little state machine for Javascript applications that live on the DOM.
 
 `dom-circuit` is small utility function that weaves selected DOM elements into a declarative state machine that organizes complex application logic into predictable signal states.
 
-The state machine acts like a live circuit connected to the DOM. Element events generate input signals that drive state change through reducers that feed back into the circuit. Signals propagate through the circuit until they arrive, fully reduced, at the circuit terminal.
+The state machine acts like a live circuit connected to the DOM. Element events generate signals that drive state change through reducers that feed back into the circuit. Signals propagate through the circuit until they arrive, fully reduced, at the circuit terminal.
 
 Given some Markup
 
 ```html
 <body>
-  <header>Registration</header>
+  <header><input placeholder="add" name="id"/></header>
   <main>
-    <input class="name"/>
-    <button class="register">Click me</button>
-    <div class="status"><div>
+    <div class="items">
+      <div class="item">
+        <span class="title">
+        <button class="remove">X</button>
+        <input>
+      </div>
+    </div>
   </main>
+  <footer>
+    <div id="total"></div>
+    <div id="done"></div>
+  </footer>
 </body>
 ```
 
-`dom-circuit` declares element relationships in terms of state changes.
+`dom-circuit` binds selected elements to signal reducers that capture and respond to state change:
 
 ```javascript
 import circuit from 'dom-circuit';
-
-const app = circuit({
-  main: {
-    // DOM events as accumulated state
-    name$change: (acc, e) => ({ ...acc, name: e.target.value }),
-    // state transition from register to status
-    register$click: (acc) => Promise.resolve({ ...acc, status: 'ok' }),
-    status: ({ status }) => {
-      this.el.innerHTML = status;
-    },
-  },
-})({});
-```
-
-The following example leaves out the HTML markup detail and item handling logic of a TODO application and focuses on the state changes that might be expected when these two aspects are brought together.
-
-```javascript
-import circuit from 'dom-circuit';
-import { add, update, remove, total, done } from './reducers.js';
+import { add, update, remove, total, done } from './some/where/else.js';
 
 const todo = circuit({
-  add$change: add,
   items: {
+    add$change: add,
     update,
     remove$click: remove,
   },
-  footer: {
-    'counts:/items': {
-      total,
-      done,
-    },
+  'counts$/items': {
+    total,
+    done,
   },
 })({});
 ```
 
-In the example above, the `add` signal reducer will bind in order of precedence to elements with a class-name, id or type equal to `add`. A `change` event listener is attached to the selected element and a signal will be generated whenever the handler is activated. The signalled reducer receives the current state and the new value. The new state is propagated through the circuit.
+## Opinionated - intentional and small
+
+The document object model is mature, powerful, highly efficient and pre-loaded into every modern browser. So why do we go out of our way to abstract over it when what we nearly always need is a bit of judicious scripting bound to selected elements? Perhaps its because the DOM doesn't really do application state management. Thats the responsibility of the application and its likely the root cause of all of this excessive abstraction.
+
+`dom-circuit` is designed to work _with_ the DOM rather than abstract over it. Weighing in at less than 1.5K minified unzipped, it packs a lot of functionality. But its only concerned with state management. If you need to update the DOM, use the DOM API, but if you need to control _when_ to update it, use this little state machine.
 
 ## How it works
 
 Circuits like the one above are constructed from `{signal: reducer}` and `{signal: circuit}` property types.
+
+### Signals
 
 Signals can resolve to elements, circuit identifiers, events or any combination of them all - but always in structured order:
 
@@ -75,9 +69,8 @@ Signals can resolve to elements, circuit identifiers, events or any combination 
   - XPath selector as in `'/root/path/to/circuit/identifier'`
 - event - `$` followed by one of
   - valid DOM eventListener as in `$click`
-  - as above + event options as in `'$click{passive: true}'`
-  - `init` - initial state event
-  - `state` - state change event
+  - `init` - initial state event as in `ABC$init`
+  - `state` - state change event as in `ABC: { $state }`
 
 Signals can be applied across circuit properties to facilitate multiple binding scenarios:
 
@@ -101,9 +94,11 @@ const cct = circuit({
 cct.add(1) // => 2
 ```
 
-Reducers follow the standard reducer argument pattern: `(state, value) => ({...state, value})`. The state passed into the reducer is the state of the immediate parent of the reducer property.
+### Reducers
 
-The value returned by the reducer will propagate through the circuit, bubbling up until it hits the circuit terminal function - an optional function that receives the changed circuit state as a `value, signal` pair:
+Reducers follow the standard reducer argument pattern: `(state, value) => ({...state, value})`. The state passed into the reducer is the state of the immediate parent of the reducer property, **not** the state of the circuit (unless the reducer is at the top level of the circuit).
+
+The value returned by the reducer will propagate through the circuit, bubbling up until it hits the circuit terminal function - an optional function that receives the changed circuit state as a `(state, signal)` pair:
 
 ```javascript
 const terminal = (state, signal) => console.log(state, signal);
@@ -140,15 +135,15 @@ State change propagation will bubble up through the circuit until it reaches the
   },
 ```
 
-State change propagation will be further reduced by sibling reducer(s) before bubbling up through the circuit until it reaches the circuit terminal.
+State change propagation will bubble up through the circuit until it reaches the circuit terminal before it passes through to sibling state. An attached terminal will be activated for each discrete state change.
 
-### Jump to a new state
+### Signal a new state
 
 ```javascript
   header: {
     add: (state, value) => {
-      this.items.update(value)
-      return // no return value
+      this.signal('/items/update',value)
+      return // no return value: prevent bubbling
     }
   },
   items: {
@@ -167,7 +162,7 @@ This pattern uses a simplified XPath syntax to bind a state change event to anot
     add: (state, value) => ({state, latest: value}),
   },
   items: {
-    '$/header/add': (items, value) => // reducer called with current items and latest update value
+    '$/header/add': (items, {latest}) => // reducer called with current items and latest update value
   }
 ```
 
@@ -178,20 +173,35 @@ State change propagation will be further reduced by deferred reducer(s) before b
 `dom-circuit` flattens internal state changes into a predicable output signal. If a terminal is attached to the circuit, the output signal sequence is guaranteed to be aligned with the order of internal state change. This guarantee holds through asynchronous operations.
 
 ```javascript
-const terminal = (_, signal) => console.log(signal);
+function terminal() => console.log(this.signal);
+
 const cct = circuit(
   {
-    state1: (acc) => ({...acc, state2: true}),
-    state2: (acc) => Promise.resolve({...acc, state3: true}),
-    state3: (acc) => ({ ...acc, done: true })),
+    s1: (acc) => Promise.resolve({ ...acc, s1: true, s2: false }),
+    s2: (acc) => Promise.resolve({ ...acc, s2: true, s3: false }),
+    s3: (acc) => Promise.resolve({ ...acc, s3: true }),
   },
   terminal
 )();
 
-cct.state1(); // logs => '/state1', '/state2', '/state3'
+cct.s1(); // logs => '/s1', '/s2', '/s3'
 ```
 
-## Key features appropriate to programmed Intentionality
+## Key features appropriate to PI (Programmed Intentionality)
 
-This is an experimental API, many of the API design decisions lean towards
-PI, especially around the ideas of iconic and indexical intentionality.
+This is an experimental API, many of the API design decisions lean towards PI, especially around the ideas of iconic and indexical intentionality.
+
+### Iconic intentionality
+
+Iconic intentionality concerns the shape of an application. This isn't always the most appropriate conceptual tool to model a problem domain, but given all of the work and development around semantic representation its a pretty good fit for web sites and other structurally defined applications.
+
+`dom-circuit`'s preference for declaratively mapping out the functional areas of an application as an extended hierarchy is iconic intentionality at work.
+
+### Indexical intentionality
+
+It almost goes without saying that when a user clicks a button and the application fires a requests and presents a response, that this often complex chain of events is intentional. Specifically this is a kind of indexical intentionality. When a user decides to register with the group and clicks on the `Register` button, that user's intention is correlated with, ie indexically points to, the sequence of events that go on to generate the response.
+
+`dom-circuit` supports indexical intentionality through optimistic element binding and various state propagation patterns:
+
+- Giving a signal a name that can bind a reducer to an element or elements by class, id or tag reduces the boilerplate required to wire up indexical intentions.
+- Controlling state change propagation through dynamic signalling and static relationships separates the concerns of cooperating intentions.
