@@ -36,7 +36,7 @@ import { add, update, remove, total, done } from './some/where/else.js';
 const todo = circuit({
   items: {
     add$change: add,
-    update,
+    update:$change: update,
     remove$click: remove,
   },
   'counts$/items': {
@@ -77,8 +77,8 @@ Signals can be applied across circuit properties to facilitate multiple binding 
 ```
 {
   items: { // binds to the element with `class="items"`
-    $click: (items, event) => // which item was clicked?...
-    $scroll: (items, event) => // er, scrolling now...
+    $click: (items, event) =>  // which item was clicked in event.target...
+    $scroll: (items, event) => // scrolling now...
     add: (items, value) => [...items, value]
   }
 }
@@ -113,6 +113,31 @@ const cct = circuit(
 
 cct.add(1); // logs the current state => {count: 2}, '/count'
 ```
+
+### Reducer context
+
+Reducer functions are called with _this_ context:
+
+```javascript
+const cct = circuit(
+  {items: {
+    '.item'(items, item) => {
+      console.log(items, item, this) // =>
+      // [1, 2, 3]
+      // 2,
+      // {
+      //  el - current element bound to signal
+      //  id - current signal id '/items/item
+      // signal an internal state change...
+      return this.signal('../items')
+    }
+  }},
+)({
+  items: [1,2,3],
+});
+```
+
+### State change
 
 Circuit state change can be actioned directly from within a reducer in several ways:
 

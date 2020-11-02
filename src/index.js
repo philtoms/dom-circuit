@@ -13,14 +13,15 @@ const fromSignal = (circuit = {}, [head, ...tail]) => {
     : [circuit[_REDUCERS], circuit[head]];
 };
 
-const document = typeof window !== 'undefined' && window.document;
+const document = globalThis.document;
+
 const optimisticQuery = (e, s) =>
   ['.', '#', ''].reduce(
     (acc, q) => (acc.length ? acc : e.querySelectorAll(q + s)),
     []
   );
 
-const build = (signals, terminal, base) => (
+const build = (signals, terminal, base, ctx = {}) => (
   state = {},
   element,
   parent = { id: '', state: () => state },
@@ -78,26 +79,21 @@ const build = (signals, terminal, base) => (
       deferredReducers.forEach(([s, r]) => resolvedReducers.push([s, r, true]));
       return acc;
     }
-    // optionally query on parent element(s) unless selector is event
-    const elements = element
-      ? !selector
-        ? element
-        : []
-            .concat(element || document)
-            .reduce(
-              (signals, element) => [
-                ...signals,
-                ...Array.from(optimisticQuery(element, selector)),
-              ],
-              []
-            )
-      : [];
 
     // normalise the signal address for state
     const address = selector.replace(/[#\.\-\[\]\(\)\"\=\^\&]/g, '');
     const id = address ? `${parent.id}/${address}` : parent.id || '/';
     if (address && typeof state === 'object' && !(address in state))
       state[address] = localCircuit ? {} : undefined;
+
+    // optionally query on parent element(s) - unless selector is event
+    const elements = element
+      ? !selector
+        ? element
+        : []
+            .concat(element || document)
+            .reduce((acc, el) => [...acc, ...optimisticQuery(el, selector)], [])
+      : [];
 
     // a signal can be handled directly or passed through to a child circuit
     const children =
@@ -116,7 +112,7 @@ const build = (signals, terminal, base) => (
           state[address],
           elements,
           { id, address, state: () => state },
-          resolvedReducers || [],
+          resolvedReducers,
           deferredSignals,
           deferring
         )) ||
@@ -128,8 +124,13 @@ const build = (signals, terminal, base) => (
       signal: (id, value) => fromSignal(acc, id.split('/'))[1](value),
     };
 
+    const proxy = new Proxy(self, {
+      get: (_, prop) => (prop in ctx ? ctx[prop] : self[prop]),
+      set: (_, prop, value) => (ctx[prop] = value),
+    });
+
     if (event === 'init') {
-      const iState = reducer.call(self, address ? state : parent.state());
+      const iState = reducer.call(proxy, address ? state : parent.state());
       if (!address) {
         state = iState;
         if (terminal) terminal(undefined, id, true, state);
@@ -144,14 +145,15 @@ const build = (signals, terminal, base) => (
       acc = address ? state : parent.state()
     ) {
       if (typeof value === 'undefined') value = acc[address];
-      self.el = this;
+      self.el = element || this;
       return propagate(
         localCircuit
           ? { ...acc, [address]: value }
-          : this || !elements.length
-          ? reducer.call(self, acc, value) || state
+          : !elements.length
+          ? reducer.call(proxy, acc, value) || state
           : elements.reduce(
-              (acc, el) => reducer.call({ ...self, el }, acc, value) || state,
+              (acc, el) =>
+                ((self.el = el) && reducer.call(proxy, acc, value)) || state,
               acc
             ),
         address,

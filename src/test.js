@@ -65,6 +65,17 @@ describe('circuit', () => {
       cct.id();
       expect(ctx.value).toBe(2);
     });
+    it('should share circuit context', () => {
+      let ctx;
+      const y = function () {
+        ctx = this;
+        ctx.value = (ctx.value || 0) + 1;
+      };
+      const cct = circuit({ id1: y, id2: y })({});
+      cct.id1();
+      cct.id2();
+      expect(ctx.value).toBe(2);
+    });
   });
 
   describe('state change', () => {
@@ -611,11 +622,13 @@ describe('binding', () => {
     expect(cct.state.id).toEqual(element);
   });
   it('should bind a signal to multiple DOM elements', () => {
+    const elems = [];
     const y = function () {
-      return this;
+      elems.push(this.el);
     };
-    circuit({ '.class': { $click: y } })({}, element);
-    expect(element.addEventListener).toHaveBeenCalledTimes(2);
+    const cct = circuit({ '.class': y })({}, element);
+    cct.class();
+    expect(elems).toEqual([element, element]);
   });
   it('should bind multiple signals to a single DOM', () => {
     const y1 = ({ id }) => ({ id: id + 1 });
