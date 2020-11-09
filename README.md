@@ -31,12 +31,14 @@ Given some Markup
 
 ```javascript
 import circuit from 'dom-circuit';
-import { add, update, remove, total, done } from './some/where/else.js';
+import { update, remove, total, done } from './some/where/else.js';
 
 const todo = circuit({
   items: {
-    add$change: add,
-    update:$change: update,
+    add$change(acc, value) {
+      this.signal('/items/update', value);
+    },
+    update$change: update,
     remove$click: remove,
   },
   'counts$/items': {

@@ -1,6 +1,6 @@
 const esmRequire = require('esm')(module);
 
-const { default: circuit, _CURRENT } = esmRequire('./index.js');
+const { default: circuit } = esmRequire('./index.js');
 
 describe('circuit', () => {
   describe('initialization', () => {
@@ -85,8 +85,8 @@ describe('circuit', () => {
       const cct = circuit({ x: { y1, y2 } })({
         x: { y1: 123, y2: 123 },
       });
-      cct.x.y1(_CURRENT);
-      cct.x.y2(_CURRENT);
+      cct.x.y1();
+      cct.x.y2();
       expect(cct.state).toEqual({ x: { y1: 456, y2: 456 } });
     });
     it('should merge state in jump order', () => {
@@ -119,9 +119,9 @@ describe('circuit', () => {
     });
     it('should signal local circuit state internally', () => {
       const z = function (state, value) {
-        this.signal('/a/b', { c: value });
+        this.signal('/a/b', value);
       };
-      const c = jest.fn();
+      const c = (acc, c) => ({ ...acc, c });
       const cct = circuit({ x: { y: { z } }, a: { b: { c } } })({});
       cct.x.y.z(123);
       expect(cct.state.a.b.c).toEqual(123);
@@ -297,16 +297,17 @@ describe('circuit', () => {
       expect(cct.state.d.y).toEqual(456);
     });
     it('should propagate through to terminal', () => {
-      const y = function (state) {
-        return { ...state, y: 1 };
+      const y = function (state, y) {
+        return { ...state, y };
       };
       const terminal = jest.fn((state) => state);
-      const cct = circuit({ x: { y }, 'd$/x': { y } }, terminal)({});
+      const cct = circuit({ x: { y }, 'd$/x/y': { y } }, terminal)({});
       cct.x.y(456);
       expect(terminal).toHaveBeenCalledWith(
-        { x: { y: 1 }, d: { y: 1 } },
-        '/d/y',
-        true
+        { x: { y: 456 }, d: { y: 456 } },
+        '/x/y',
+        true,
+        undefined
       );
     });
   });
@@ -322,12 +323,10 @@ describe('circuit', () => {
       expect(cct.state).toEqual({ id: 2 });
     });
     it('should merge $init into state', () => {
-      const originalState = {
-        id: 1,
-      };
+      const originalState = {};
       const cct = circuit({
         id: {
-          $init: (acc) => ({ ...acc, id: acc.id + 1 }),
+          $init: (acc) => ({ ...acc, id: 2 }),
         },
       })(originalState);
       expect(cct.state).not.toBe(originalState);
@@ -507,7 +506,9 @@ describe('README examples', () => {
 
     const blueprint = {
       header: {
-        add: (state, value) => todo.items.update(value),
+        add(state, value) {
+          this.signal('/items/update', value);
+        },
       },
       items: {
         update,
@@ -590,18 +591,18 @@ describe('binding', () => {
   });
 
   it('should access mountpoint element', () => {
-    circuit({ id: jest.fn() })({ id: 123 }, element);
+    circuit({ id: jest.fn() })({ id: 123 }, { element });
     expect(element.querySelectorAll).toHaveBeenCalledWith('#id');
   });
   it('should override lazy selector', () => {
-    circuit({ '.id': jest.fn() })({ id: 123 }, element);
-    expect(element.querySelectorAll).toHaveBeenCalledWith('.id');
+    circuit({ '#id': jest.fn() })({ id: 123 }, { element });
+    expect(element.querySelectorAll).toHaveBeenCalledWith('#id');
   });
   it('should bind a signal to a DOM element', () => {
     const y = function () {
       return { id: this.el };
     };
-    const cct = circuit({ id$click: y })({}, element);
+    const cct = circuit({ id$click: y })({}, { element });
     handlers.click.call(element, { target: element });
     expect(cct.state.id).toEqual(element);
   });
@@ -609,7 +610,7 @@ describe('binding', () => {
     const y = function (state, { target }) {
       return { XXX: target };
     };
-    const cct = circuit({ 'XXX:id$click': y })({}, element);
+    const cct = circuit({ 'XXX:id$click': y })({}, { element });
     cct.XXX({ target: element });
     expect(cct.state).toEqual({ XXX: element });
   });
@@ -617,7 +618,7 @@ describe('binding', () => {
     const y = function () {
       return { id: this.el };
     };
-    const cct = circuit({ '#id': { $click: y } })({ id: 123 }, element);
+    const cct = circuit({ id: { $click: y } })({ id: 123 }, { element });
     handlers.click.call(element, { target: element });
     expect(cct.state.id).toEqual(element);
   });
@@ -626,16 +627,16 @@ describe('binding', () => {
     const y = function () {
       elems.push(this.el);
     };
-    const cct = circuit({ '.class': y })({}, element);
+    const cct = circuit({ class: y })({}, { element });
     cct.class();
     expect(elems).toEqual([element, element]);
   });
   it('should bind multiple signals to a single DOM', () => {
     const y1 = ({ id }) => ({ id: id + 1 });
     const y2 = ({ id }) => ({ id: id + 2 });
-    const cct = circuit({ '#id': { $click1: y1, $click2: y2 } })(
+    const cct = circuit({ id: { $click1: y1, $click2: y2 } })(
       { id: 1 },
-      element
+      { element }
     );
     handlers.click1.call(element, { target: element });
     expect(cct.state).toEqual({
