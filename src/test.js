@@ -354,7 +354,7 @@ describe('circuit', () => {
       })(originalState);
       expect(cct.state).toEqual({ id: 6 });
     });
-    it('should FIX: nest order sensitivity', () => {
+    it('nest order sensitivity', () => {
       const originalState = {
         id: 1,
       };
@@ -387,6 +387,20 @@ describe('circuit', () => {
       cct.id.x(2);
       expect(cct.state).toEqual({ id: { x: 2, y: 3 }, z: 3 });
     });
+    it('should propagate terminal only $state', () => {
+      const cct = circuit({
+        x: {
+          $init: (state) => {
+            return { ...state, y: 2 };
+          },
+          $state: (state) => {
+            return { ...state, z: 3 };
+          },
+        },
+      })({});
+      cct.x(1);
+      expect(cct.state).toEqual({ x: 1, y: 2, z: 3 });
+    });
     it('should include signal in $state', () => {
       let signal1, signal2;
       const cct = circuit({
@@ -401,8 +415,8 @@ describe('circuit', () => {
         },
       })({});
       cct.id.x(2);
-      expect(signal1).toEqual('/id');
-      expect(signal2).toEqual('/');
+      expect(signal1).toEqual('/id/state');
+      expect(signal2).toEqual('/state');
     });
   });
 
