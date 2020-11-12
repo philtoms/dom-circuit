@@ -154,13 +154,6 @@ describe('circuit', () => {
   });
 
   describe('propagation', () => {
-    it('should propagate through sibling state', () => {
-      const x = (state, value) => ({ ...state, x: value + 1 });
-      const y = () => ({ x: 1, y: 1 });
-      const cct = circuit({ x, y })();
-      cct.y();
-      expect(cct.state).toEqual({ x: 2, y: 1 });
-    });
     it('should not propagate unchanged sibling state', () => {
       const x = (state, value) => ({ ...state, x: value + 1 });
       const y = () => ({ x: 1, y: 1 });
@@ -452,25 +445,6 @@ describe('circuit', () => {
       )({});
       await cct.id.x(2);
     });
-    it('should resolve sibling state change sequence at terminal', (done) => {
-      const terminal = (state, signal) => {
-        if (signal === '/id/z') {
-          expect(state).toEqual({ id: { x: 1, y: 2, z: 3 } });
-          done();
-        }
-      };
-      const cct = circuit(
-        {
-          id: {
-            x: (s, x) => Promise.resolve({ ...s, x, y: 1 }),
-            y: (s, y) => Promise.resolve({ ...s, y: y + 1, z: 2 }),
-            z: (s, z) => Promise.resolve({ ...s, z: z + 1 }),
-          },
-        },
-        terminal
-      )({});
-      cct.id.x(1);
-    });
   });
 });
 
@@ -574,8 +548,18 @@ describe('README examples', () => {
     };
     const cct = circuit(
       {
-        s1: (acc) => Promise.resolve({ ...acc, s1: true, s2: false }),
-        s2: (acc) => Promise.resolve({ ...acc, s2: true, s3: false }),
+        s1(acc) {
+          return Promise.resolve({ ...acc, s1: true }).then(() => {
+            log.push(this.id);
+            return this.signal('/s2', true);
+          });
+        },
+        s2(acc) {
+          return Promise.resolve({ ...acc, s2: true }).then(() => {
+            log.push(this.id);
+            return this.signal('/s3', true);
+          });
+        },
         s3: (acc) => Promise.resolve({ ...acc, s3: true }),
       },
       terminal

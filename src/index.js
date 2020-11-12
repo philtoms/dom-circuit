@@ -64,8 +64,6 @@ const build = (signals, terminal, base, ctx = {}) => (
           (acc, [key, handler, deferring]) =>
             deferring && signal.startsWith(key)
               ? handler(acc[address] || acc, handlers) && state
-              : key !== address && acc[key] !== lastState[key]
-              ? handler(acc[key], handlers)
               : (!key && handler(undefined, handlers, acc)) || acc,
           state
         );
@@ -104,8 +102,10 @@ const build = (signals, terminal, base, ctx = {}) => (
 
     // normalise the signal address for state
     const address = selector.replace(/[#\.\-\[\]\(\)\"\=\^\&]/g, '');
-    const id =
-      address || event ? `${parent.id}/${address || event}` : parent.id || '/';
+    const id = (address || event
+      ? `${parent.id}/${address || event}`
+      : parent.id || '/'
+    ).replace('//', '/');
     if (address && typeof state === 'object' && !(address in state))
       state[address] = hasChildren ? {} : undefined;
 
@@ -137,7 +137,10 @@ const build = (signals, terminal, base, ctx = {}) => (
 
     const proxy = new Proxy(self, {
       get: (_, prop) => (prop in ctx ? ctx[prop] : self[prop]),
-      set: (_, prop, value) => (ctx[prop] = value),
+      set: (_, prop, value) => {
+        ctx[prop] = value;
+        return true;
+      },
     });
 
     if (event === 'init') {
