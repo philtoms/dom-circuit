@@ -211,24 +211,24 @@ State change propagation will be further reduced by deferred reducer(s) before b
 ```javascript
 function terminal() => console.log(this.id);
 
-    const cct = circuit(
-      {
-        s1(acc) {
-          return Promise.resolve({ ...acc, s1: true }).then(() => {
-            console.log(this.id);
-            return this.signal('/s2', true);
-          });
-        },
-        s2(acc) {
-          return Promise.resolve({ ...acc, s2: true }).then(() => {
-            console.log(this.id);
-            return this.signal('/s3', true);
-          });
-        },
-        s3: (acc) => Promise.resolve({ ...acc, s3: true }),
-      },
-      terminal
-    )();
+const cct = circuit(
+  {
+    s1(acc) {
+      return Promise.resolve({ ...acc, s1: true }).then(() => {
+        console.log(this.id);
+        return this.signal('/s2', true);
+      });
+    },
+    s2(acc) {
+      return Promise.resolve({ ...acc, s2: true }).then(() => {
+        console.log(this.id);
+        return this.signal('/s3', true);
+      });
+    },
+    s3: (acc) => Promise.resolve({ ...acc, s3: true }),
+  },
+  terminal
+)();
 
 cct.s1(); // logs => '/s1', '/s2', '/s3'
 ```

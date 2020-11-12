@@ -31,7 +31,7 @@ const build = (signals, terminal, base, ctx = {}) => (
   deferredSignals = [],
   handlers = []
 ) => {
-  const propagate = (signalState, address, deferredHandlers, signal, local) => {
+  const propagate = (signalState, address, deferred, signal, local) => {
     // bale until fulfilled
     if (signalState instanceof Promise) {
       signalState.then((s) => {
@@ -46,10 +46,8 @@ const build = (signals, terminal, base, ctx = {}) => (
     )
       return signalState;
 
-    const deferred = deferredHandlers === handlers;
-    // reduce signal state into local circuit state.
+    const bubble = deferred !== handlers;
 
-    const lastState = state;
     // defer bubbling for locally propagated signals
     if (local)
       state = handlers.reduce(
@@ -59,18 +57,20 @@ const build = (signals, terminal, base, ctx = {}) => (
       );
     else {
       state = signalState;
-      if (!deferred)
+      if (bubble)
         state = handlers.reduce(
           (acc, [key, handler, deferring]) =>
             deferring && signal.startsWith(key)
-              ? handler(acc[address] || acc, handlers) && state
+              ? handler(
+                  acc[address] === undefined ? acc : acc[address],
+                  handlers
+                ) && state
               : (!key && handler(undefined, handlers, acc)) || acc,
           state
         );
     }
 
-    if (terminal && !deferred)
-      terminal(state, signal, !!address, deferredHandlers);
+    if (terminal && bubble) terminal(state, signal, !!address, deferred);
 
     return state;
   };
