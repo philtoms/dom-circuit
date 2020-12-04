@@ -66,7 +66,7 @@ Circuits like the one above are constructed from `{signal: reducer}` and `{signa
 
 Signals can resolve to elements, circuit identifiers, events or any combination of them all - but always in structured order:
 
-`(alias:)? (selector)? ($event)?` where:
+`(alias:)? (selector)? ($event)? (_)?` where:
 
 - alias - circuit identifier when signal is too noisy as in `'open:#x.open[arg=123]'`
 - selector - one of
@@ -78,6 +78,7 @@ Signals can resolve to elements, circuit identifiers, events or any combination 
   - XPath selector as in `'$/root/path/to/signal/selector'` or `'$../../relative/path'`
   - `init` - initial state event as in `ABC$init`
   - `state` - terminal state change event as in `ABC: { $state }`
+- _ (underscore) - bind map function to handler as in `{fn_: value => value + 1}`
 
 Signals can be applied across circuit properties to facilitate multiple binding scenarios. This items cct has three signal states: two event signals and an internal update state:
 
@@ -136,6 +137,18 @@ const cct = circuit(
 cct.count(1); // logs the current state => {count: 2}, '/count'
 ```
 
+### Map Reducers
+
+When access to parent state is inappropriate, map reducer pattern can be substituted. The Map reducer follows the standard map argument pattern: `value => value` but the internal handler continues to reduce the mapped value into the parent state before propagating through the circuit.
+
+Map reducers are registered by appending an underscore suffix to the signal selector:
+
+```javascript
+circuit({
+  count_: (value) => value + 1,
+});
+```
+
 ### Reducer context
 
 Reducer functions are called with _this_ context:
@@ -187,7 +200,7 @@ State change propagation will bubble up through the circuit until it reaches the
   }
 ```
 
-Circuit state will jump to the referenced circuit signal selector and propagate to terminal. The `signal` function returns the signalled state. In this example above, propagation is halted by returning undefined. Otherwise propagation would continue to terminal in the expected manner.
+Circuit state will jump to the referenced circuit signal selector and propagate to terminal. The `signal` function returns the signalled state. In the example above, propagation is halted by returning undefined. Otherwise propagation would continue to terminal in the expected manner.
 
 ### Bind to deferred state change
 
@@ -245,7 +258,7 @@ Iconic intentionality concerns the shape of an application. This isn't always th
 
 ### Indexical intentionality
 
-It almost goes without saying that when a user clicks a button and the application fires a requests and presents a response, that this often complex chain of events is intentional. Specifically this is a kind of indexical intentionality. When a user decides to register with the group and clicks on the `Register` button, that user's intention is correlated with, ie indexically points to, the sequence of events that go on to generate the response.
+It almost goes without saying that when a user clicks a button and the application fires a requests and generates a response, that this often complex chain of events is intentional. Specifically this is a kind of indexical intentionality. For example, When a user interacts with a website by logging in, that user's intention is correlated with, ie indexically points to, the sequence of events that go on to generate the log-in response.
 
 `dom-circuit` supports indexical intentionality through optimistic element binding and various state propagation patterns:
 
