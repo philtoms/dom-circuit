@@ -248,7 +248,7 @@ cct.s1(); // logs => '/s1', '/s2', '/s3'
 
 ## Key features appropriate to PI (Programmed Intentionality)
 
-This is an experimental API, many of the API design decisions lean towards PI. The declarative structure of the circuit supports and promotes the ideas of iconic and indexical intentionality.
+This is an experimental API, many of the API design decisions lean towards PI. The declarative structure of the circuit supports and promotes the ideas of iconic, indexical and symbolic intentionality.
 
 ### Iconic intentionality
 
@@ -264,5 +264,15 @@ It almost goes without saying that when a user clicks a button and the applicati
 
 - Giving a signal a name that can bind a reducer to an element or elements by class, id or tag reduces the boilerplate required to wire up indexical intentions.
 - Controlling state change propagation through dynamic signalling and static relationships separates the concerns of cooperating intentions.
+
+### Symbolic intentionality
+
+Symbolic intentionality (aka reentrancy) is all about agreement. Given an intentional stance, that is, a rational interpretation of an intentional action or behavior, then symbolic intentionality arises when the expected outcome of any such action or behavior meets agreement from multiple viewpoints.
+
+Symbolic intentionality usually includes aspects of iconic and indexical intentionality, but it is more than the sum of these parts. The login sequence described above has both iconic and indexical intentionality. But it also has symbolic intentionality in the sense that a user understands the requirement and the consequence of the intention.
+
+Programmatically, symbolic intentionality captures the relationship between two or more functional units operating on behalf of and towards a shared goal. It provides a mechanism of cooperation that both parts understand, but that allows them to remain completely independent.
+
+`dom-circuit` supports symbolic intentionality through an experimental reentrancy pattern of circuit layers. In this pattern, each layer is an independent circuit, but is able to propagate state change across layer boundaries through xpath aligned signal selectors called junctions (see [short-circuit](https://github.com/philtoms/short-circuit) for more details).
 
 So in summary, very much a work in progress.
