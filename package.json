@@ -1,10 +1,10 @@
 {
   "name": "dom-circuit",
-  "version": "1.7.0-alpha",
+  "version": "1.7.1-alpha",
   "description": "DOM state machine as a live circuit",
   "main": "index.js",
   "scripts": {
-    "build": "terser ./src/index.js -c -m --mangle-props --module -o ./index.js",
+    "build": "terser ./src/index.js -c -m --mangle-props reserved=['address','el','signal','id'] --module -o ./index.js",
     "test": "jest "
   },
   "author": "Phil Toms",
