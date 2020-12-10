@@ -111,10 +111,12 @@ Propagation only occurs when a state value change is detected.
 ```javascript
 const cct = circuit({
   state1: (acc, value) => acc // no state change so no propagation
-  state1: (acc, value) => {return;} // no state change so no propagation
-  state2: (acc, value) => ({...acc, state2: value}) // no signalled value change so no propagation
-  state3: (acc, value) => ({...acc, state3: value + 1}) // propagate state change
-})()
+  state2: (acc, value) => {return;} // no state change, so force propagate signal only
+  state3: (acc, value) => ({...acc, state3: value}) // propagate state change
+  state4: (acc, value) => ({...acc, state4: value + 1}) // propagate state change
+  value1_: (value) => value // no state change so no propagation
+  value2_: (value) => {return;} // no state change, so force propagate signal only
+})
 ```
 
 ## Reducers
@@ -240,8 +242,8 @@ const cct = circuit(
     },
     s3: (acc) => Promise.resolve({ ...acc, s3: true }),
   },
-  terminal
-)();
+  { terminal }
+);
 
 cct.s1(); // logs => '/s1', '/s2', '/s3'
 ```

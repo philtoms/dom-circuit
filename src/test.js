@@ -40,18 +40,22 @@ describe('circuit', () => {
     it('should map value into reduced state', () => {
       const x = jest.fn((value) => value * 2);
       const cct = circuit({ id_: x });
-      cct.id(123);
-      expect(cct.state).toEqual({ id: 246 });
+      expect(cct.id(123)).toEqual({ id: 246 });
+    });
+    it('should access signal context', () => {
+      let ctx;
+      const y_ = function () {
+        ctx = this;
+        ctx.value = (ctx.value || 0) + 1;
+      };
+      const cct = circuit({ id: y_ });
+      cct.id();
+      cct.id();
+      expect(ctx.value).toBe(2);
     });
   });
 
   describe('reducer', () => {
-    it('should reduce a deep circuit', () => {
-      const y = (state, value) => ({ ...state, y: value });
-      const cct = circuit({ id: { x: { y } } });
-      cct.id.x.y(456);
-      expect(cct.state).toEqual({ id: { x: { y: 456 } } });
-    });
     it('should access signal context', () => {
       let ctx;
       const y = function () {
@@ -162,20 +166,21 @@ describe('circuit', () => {
   });
 
   describe('propagation', () => {
-    it('should not propagate unchanged sibling state', () => {
-      const x = (state, value) => ({ ...state, x: value + 1 });
-      const y = () => ({ x: 1, y: 1 });
-      const cct = circuit({ x, y }, { state: { x: 1 } });
-      cct.y();
-      expect(cct.state).toEqual({ x: 1, y: 1 });
-    });
     it('should only propagate changed state', () => {
-      const x = (state, value) => ({ ...state, id: value });
+      const x = (state) => state;
       const terminal = jest.fn((state) => state);
       const cct = circuit({ id: x }, { terminal, state: { id: 123 } });
       cct.id(456);
       cct.id(456);
-      expect(terminal).toHaveBeenCalledTimes(1);
+      expect(terminal).not.toHaveBeenCalled();
+    });
+    it('should only propagate changed map value', () => {
+      const x_ = (value) => value;
+      const terminal = jest.fn((state) => state);
+      const cct = circuit({ id: x_ }, { terminal, state: { id: 123 } });
+      cct.id(456);
+      cct.id(456);
+      expect(terminal).not.toHaveBeenCalled();
     });
     it('should not propagate through sibling event', () => {
       const x = (state, value) => ({ ...state, x: value + 1 });
@@ -184,7 +189,7 @@ describe('circuit', () => {
       cct.y();
       expect(cct.state).toEqual({ x: 1, y: 1 });
     });
-    it('should halt propagation', () => {
+    it('should force propagate unchanged state', () => {
       const initState = { id: 123 };
       const terminal = jest.fn((state) => state);
       const x = function () {
@@ -192,7 +197,18 @@ describe('circuit', () => {
       };
       const cct = circuit({ id: x }, { state: initState, terminal });
       cct.id(456);
-      expect(terminal).not.toHaveBeenCalled();
+      expect(terminal).toHaveBeenCalled();
+      expect(cct.state).toBe(initState);
+    });
+    it('should force propagate unchanged map value', () => {
+      const initState = { id: 123 };
+      const terminal = jest.fn((state) => state);
+      const x_ = function () {
+        return;
+      };
+      const cct = circuit({ id: x_ }, { state: initState, terminal });
+      cct.id(456);
+      expect(terminal).toHaveBeenCalled();
       expect(cct.state).toBe(initState);
     });
     it('should propagate to deferred state', () => {
@@ -306,9 +322,8 @@ describe('circuit', () => {
       cct.x.y(456);
       expect(terminal).toHaveBeenCalledWith(
         { x: { y: 456 }, d: { y: 456 } },
-        '/x/y',
-        true,
-        undefined
+        undefined,
+        true
       );
     });
   });
@@ -434,6 +449,44 @@ describe('circuit', () => {
       expect(signal1).toEqual('/id/state');
       expect(signal2).toEqual('/state');
     });
+    it('should not propagate $init though $state events', () => {
+      const state = jest.fn();
+      circuit({
+        $state: state,
+        id: {
+          $init: ({ id }) => ({ id: id + 1 }),
+        },
+      });
+      expect(state).not.toHaveBeenCalled();
+    });
+    it('should access $state signal context', () => {
+      let ctx;
+      const $state = function () {
+        ctx = this;
+        ctx.value = (ctx.value || 0) + 1;
+      };
+      const cct = circuit({
+        id: {
+          x: (s, x) => ({ ...s, x }),
+          $state,
+        },
+      });
+      cct.id.x(2);
+      expect(ctx.value).toBe(1);
+    });
+    it('should access $init signal context', () => {
+      let ctx;
+      const $init = function () {
+        ctx = this;
+        ctx.value = (ctx.value || 0) + 1;
+      };
+      const cct = circuit({
+        id: {
+          $init,
+        },
+      });
+      expect(ctx.value).toBe(1);
+    });
   });
 
   describe('async', () => {
@@ -454,19 +507,18 @@ describe('circuit', () => {
       expect(cct.state).toEqual({ id: { x: 2 } });
     });
 
-    it('should resolve at terminal', async () => {
-      const terminal = async (state) => {
+    it('should resolve at terminal', (done) => {
+      const terminal = (state) => {
         expect(state).toEqual({ id: { x: 2 } });
+        done();
       };
-      const cct = circuit(
-        {
-          id: {
-            x: (s, x) => Promise.resolve({ ...s, x }),
-          },
+      const cct = circuit({
+        id: {
+          x: (s, x) => Promise.resolve({ ...s, x }),
         },
-        { terminal }
-      );
-      await cct.id.x(2);
+        $state: terminal,
+      });
+      cct.id.x(2);
     });
   });
 
@@ -617,31 +669,31 @@ describe('README examples', () => {
 
   it('async state change order', (done) => {
     let log = [];
-    const terminal = (value, signal) => {
-      log.push(signal);
-      if (value.s3) {
-        expect(log).toEqual(['/s1', '/s2', '/s3']);
-        done();
-      }
-    };
-    const cct = circuit(
-      {
-        s1(acc) {
-          return Promise.resolve({ ...acc, s1: true }).then(() => {
-            log.push(this.id);
-            return this.signal('/s2', true);
-          });
-        },
-        s2(acc) {
-          return Promise.resolve({ ...acc, s2: true }).then(() => {
-            log.push(this.id);
-            return this.signal('/s3', true);
-          });
-        },
-        s3: (acc) => Promise.resolve({ ...acc, s3: true }),
+    function terminal() {
+      expect(log).toEqual(['/s1', '/s2', '/s3']);
+      done();
+    }
+    const cct = circuit({
+      s1(acc) {
+        return Promise.resolve({ ...acc, s1: true }).then(() => {
+          log.push(this.id);
+          return this.signal('/s2', true);
+        });
       },
-      { terminal }
-    );
+      s2(acc) {
+        return Promise.resolve({ ...acc, s2: true }).then(() => {
+          log.push(this.id);
+          return this.signal('/s3', true);
+        });
+      },
+      s3(acc) {
+        return Promise.resolve({ ...acc, s3: true }).then((acc) => {
+          log.push(this.id);
+          return acc;
+        });
+      },
+      $state: terminal,
+    });
 
     cct.s1(); // logs => '/s1', '/s2', '/s3'
   });
@@ -659,8 +711,11 @@ describe('README examples', () => {
       add_(value) {
         // return `<input onChange=${(e) => this.signal('//items/add', e)} />`;
         this.signal('//items/add', value);
+        return value;
       },
-      items_: (items) => items.map((item) => `<div>${item}</div>`),
+      items_: (items) => {
+        return items.map((item) => `<div>${item}</div>`);
+      },
       $state: ({ items }) => `<main>${items}</main>`,
     };
 
@@ -755,5 +810,22 @@ describe('binding', () => {
     expect(cct.state).toEqual({
       id: 4,
     });
+  });
+  it('should access element on $init', () => {
+    let ctx;
+    const $init = function () {
+      ctx = this;
+      console.log(ctx);
+      ctx.value = this.el;
+    };
+    circuit(
+      {
+        id: {
+          $init,
+        },
+      },
+      { state: { id: 1 }, mount: element }
+    );
+    expect(ctx.value).toBe(element);
   });
 });
