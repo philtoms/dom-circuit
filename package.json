@@ -1,6 +1,6 @@
 {
   "name": "dom-circuit",
-  "version": "1.7.2-alpha",
+  "version": "1.7.3-alpha",
   "description": "DOM state machine as a live circuit",
   "main": "index.js",
   "scripts": {

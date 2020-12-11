@@ -322,6 +322,7 @@ describe('circuit', () => {
       cct.x.y(456);
       expect(terminal).toHaveBeenCalledWith(
         { x: { y: 456 }, d: { y: 456 } },
+        '/x/y',
         undefined,
         true
       );
@@ -815,7 +816,6 @@ describe('binding', () => {
     let ctx;
     const $init = function () {
       ctx = this;
-      console.log(ctx);
       ctx.value = this.el;
     };
     circuit(
