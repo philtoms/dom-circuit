@@ -170,17 +170,17 @@ describe('circuit', () => {
       const x = (state) => state;
       const terminal = jest.fn((state) => state);
       const cct = circuit({ id: x }, { terminal, state: { id: 123 } });
+      cct.id(123);
       cct.id(456);
-      cct.id(456);
-      expect(terminal).not.toHaveBeenCalled();
+      expect(terminal).toHaveBeenCalledTimes(1);
     });
     it('should only propagate changed map value', () => {
       const x_ = (value) => value;
       const terminal = jest.fn((state) => state);
       const cct = circuit({ id: x_ }, { terminal, state: { id: 123 } });
+      cct.id(123);
       cct.id(456);
-      cct.id(456);
-      expect(terminal).not.toHaveBeenCalled();
+      expect(terminal).toHaveBeenCalledTimes(1);
     });
     it('should not propagate through sibling event', () => {
       const x = (state, value) => ({ ...state, x: value + 1 });
@@ -192,10 +192,8 @@ describe('circuit', () => {
     it('should force propagate unchanged state', () => {
       const initState = { id: 123 };
       const terminal = jest.fn((state) => state);
-      const x = function () {
-        return;
-      };
-      const cct = circuit({ id: x }, { state: initState, terminal });
+      const id = (acc) => acc;
+      const cct = circuit({ id }, { state: initState, terminal });
       cct.id(456);
       expect(terminal).toHaveBeenCalled();
       expect(cct.state).toBe(initState);
@@ -203,10 +201,8 @@ describe('circuit', () => {
     it('should force propagate unchanged map value', () => {
       const initState = { id: 123 };
       const terminal = jest.fn((state) => state);
-      const x_ = function () {
-        return;
-      };
-      const cct = circuit({ id: x_ }, { state: initState, terminal });
+      const id_ = (value) => value;
+      const cct = circuit({ id_ }, { state: initState, terminal });
       cct.id(456);
       expect(terminal).toHaveBeenCalled();
       expect(cct.state).toBe(initState);
@@ -330,7 +326,7 @@ describe('circuit', () => {
   });
 
   describe('events', () => {
-    it('should merge $init into root state', () => {
+    it('should merge $init into state', () => {
       const originalState = {
         id: 1,
       };
@@ -342,32 +338,6 @@ describe('circuit', () => {
       );
       expect(cct.state).toEqual({ id: 2 });
     });
-    it('should merge $init into state', () => {
-      const originalState = {};
-      const cct = circuit(
-        {
-          id: {
-            $init: (acc) => ({ ...acc, id: 2 }),
-          },
-        },
-        { state: originalState }
-      );
-      expect(cct.state).not.toBe(originalState);
-      expect(cct.state).toEqual({ id: 2 });
-    });
-    it('should merge $init into state prop', () => {
-      const originalState = {
-        id: 1,
-      };
-      const cct = circuit(
-        {
-          id$init: (acc) => ({ ...acc, id: acc.id + 1 }),
-        },
-        { state: originalState }
-      );
-      expect(cct.state).toBe(originalState);
-      expect(cct.state).toEqual({ id: 2 });
-    });
     it('should merge nested $init into root state', () => {
       const originalState = {
         id: 1,
@@ -375,7 +345,9 @@ describe('circuit', () => {
       const cct = circuit(
         {
           id: {
-            $init: ({ id }) => ({ id: id + 2 }),
+            $init: (id) => {
+              return id + 2;
+            },
           },
           $init: ({ id }) => ({ id: id * 2 }),
         },
@@ -391,7 +363,7 @@ describe('circuit', () => {
         {
           $init: ({ id }) => ({ id: id * 2 }),
           id: {
-            $init: ({ id }) => ({ id: id + 2 }),
+            $init: (id) => id + 2,
           },
         },
         { state: originalState }
@@ -418,20 +390,6 @@ describe('circuit', () => {
       });
       cct.id.x(2);
       expect(cct.state).toEqual({ id: { x: 2, y: 3 }, z: 3 });
-    });
-    it('should propagate terminal only $state', () => {
-      const cct = circuit({
-        x: {
-          $init: (state) => {
-            return { ...state, y: 2 };
-          },
-          $state: (state) => {
-            return { ...state, z: 3 };
-          },
-        },
-      });
-      cct.x(1);
-      expect(cct.state).toEqual({ x: 1, y: 2, z: 3 });
     });
     it('should include signal in $state', () => {
       let signal1, signal2;
@@ -596,7 +554,7 @@ describe('README examples', () => {
   it('counter example', () => {
     const cct = circuit(
       {
-        'add:count': ({ count }, value) => ({ count: count + value }),
+        'add:count': ({ count }) => ({ count: count + 1 }),
       },
       {
         state: {
@@ -604,7 +562,7 @@ describe('README examples', () => {
         },
       }
     );
-    cct.add(1);
+    cct.add();
     expect(cct.state.count).toEqual(2);
   });
 
@@ -678,13 +636,13 @@ describe('README examples', () => {
       s1(acc) {
         return Promise.resolve({ ...acc, s1: true }).then(() => {
           log.push(this.id);
-          return this.signal('/s2', true);
+          this.signal('/s2', true);
         });
       },
       s2(acc) {
         return Promise.resolve({ ...acc, s2: true }).then(() => {
           log.push(this.id);
-          return this.signal('/s3', true);
+          this.signal('/s3', true);
         });
       },
       s3(acc) {
@@ -710,13 +668,10 @@ describe('README examples', () => {
 
     const view = {
       add_(value) {
-        // return `<input onChange=${(e) => this.signal('//items/add', e)} />`;
-        this.signal('//items/add', value);
-        return value;
+        // return `<input onChange=${(e) => this.signal('/data/items/add', e)} />`;
+        this.signal('/data/items/add', value);
       },
-      items_: (items) => {
-        return items.map((item) => `<div>${item}</div>`);
-      },
+      items_: (items) => items.map((item) => `<div>${item}</div>`),
       $state: ({ items }) => `<main>${items}</main>`,
     };
 
@@ -724,6 +679,7 @@ describe('README examples', () => {
     // allowing state change signals to cross over the layer boundary.
 
     const app = circuit(data, {
+      layer: 'data',
       state: { items: [] },
     }).layer(view, {
       terminal: (displayState) =>

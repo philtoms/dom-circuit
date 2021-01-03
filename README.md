@@ -6,6 +6,12 @@ A little state machine for Javascript applications that live on the DOM.
 
 The state machine acts like a live circuit connected to the DOM. Element events generate signals that drive state change through reducers that feed back into the circuit. Reduced signals propagate through the circuit until they arrive, fully reduced, at the circuit terminal.
 
+## Opinionated - intentional and small
+
+The document object model is mature, powerful, highly efficient and pre-loaded into every modern browser. So why do we go out of our way to abstract over it when what we nearly always need is a bit of judicious scripting bound to selected elements? Perhaps its because the DOM doesn't really do application state management. Thats the responsibility of the application and its likely the root cause of all of this excessive abstraction.
+
+`dom-circuit` is designed to work _with_ the DOM rather than abstract over it. If you need to update the DOM, use the DOM API. If you need to control _when_ to update it, use this little state machine.
+
 Given some Markup
 
 ```html
@@ -52,12 +58,6 @@ const todo = circuit({
 
 This little circuit captures the primary intent of a simple TODO application. It binds core intentional DOM elements to handlers that feed the circuit with user driven input signals. Two state change patterns are employed: firstly, a direct signal state change when the user `add`s a new item, and secondly; an XPath deferred event to signal the `counts` state whenever items state changes.
 
-## Opinionated - intentional and small
-
-The document object model is mature, powerful, highly efficient and pre-loaded into every modern browser. So why do we go out of our way to abstract over it when what we nearly always need is a bit of judicious scripting bound to selected elements? Perhaps its because the DOM doesn't really do application state management. Thats the responsibility of the application and its likely the root cause of all of this excessive abstraction.
-
-`dom-circuit` is designed to work _with_ the DOM rather than abstract over it. If you need to update the DOM, use the DOM API. If you need to control _when_ to update it, use this little state machine.
-
 ## How it works
 
 Circuits like the one above are constructed from `{signal: reducer}` and `{signal: circuit}` property types. Signal reducers like `add` use functional object methods with a standard reducer signature. Signal circuits like `items` build the overall circuit structure through composition: each nested circuit has its own state and terminal. Signals propagate through a circuit before bubbling up to and propagating through parent circuit state.
@@ -96,10 +96,10 @@ Each circuit identifier takes the value of the signal selector as its name. When
 
 ```javascript
 const cct = circuit({
-  'add:count' (({count}, value) => ({count: count + value}))
+  'add:count' (({count}) => ({count: count + 1}))
 })({count: 1})
 
-cct.add(1) // => 2
+cct.add() // => 2
 ```
 
 ## Propagation
@@ -111,11 +111,10 @@ Propagation only occurs when a state value change is detected.
 ```javascript
 const cct = circuit({
   state1: (acc, value) => acc // no state change so no propagation
-  state2: (acc, value) => {return;} // no state change, so force propagate signal only
+  state2: (acc, value) => {return;} // no state change, so no propagation
   state3: (acc, value) => ({...acc, state3: value}) // propagate state change
-  state4: (acc, value) => ({...acc, state4: value + 1}) // propagate state change
   value1_: (value) => value // no state change so no propagation
-  value2_: (value) => {return;} // no state change, so force propagate signal only
+  value2_: (value) => {return;} // no state change, so , so no propagation
 })
 ```
 
